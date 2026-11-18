@@ -1,0 +1,106 @@
+# Shared UI Test Steps Template
+# This template can be used in both deployment stages and standalone test pipelines
+parameters:
+  - name: envName
+    type: string
+  - name: pytest_tag
+    type: string
+    default: "smoke"
+  - name: workingDirectory
+    type: string
+    default: "$(System.DefaultWorkingDirectory)"
+  - name: parallelWorkers
+    type: number
+    default: 4
+  - name: pythonVersion
+    type: string
+    default: "3.12"
+
+steps:
+  - task: UsePythonVersion@0
+    displayName: "Use Python ${{parameters.pythonVersion}}"
+    inputs:
+      versionSpec: "${{parameters.pythonVersion}}"
+
+  - bash: |
+      chmod +x pipelines/setup-ubuntu-agent.sh
+      ./pipelines/setup-ubuntu-agent.sh
+    displayName: "Setup Python Environment and Dependencies"
+    workingDirectory: ${{parameters.workingDirectory}}
+
+  # - bash: |
+  #     source .venv/bin/activate
+  #     python login_setup.py
+  #   displayName: "Create authenticated browser state"
+  #   env:
+  #     WEBTEST_USERNAME: $(WEBTEST_USERNAME)
+  #     WEBTEST_PASSWORD: $(WEBTEST_PASSWORD)
+  #     browser: $(browser)
+  #   workingDirectory: ${{parameters.workingDirectory}}
+
+  - bash: |
+      echo "==== Connectivity Test ===="
+      curl -I -L https://analytical-data-access.education.gov.uk/
+      echo ""
+      echo "==== Page Title ===="
+      curl -L https://analytical-data-access.education.gov.uk/ -o response.html
+      grep -i "<title>" response.html || true
+      echo ""
+      echo "==== DNS Resolution ===="
+      nslookup analytical-data-access.education.gov.uk || true           
+    displayName: "Check the site"
+    condition: succeededOrFailed()
+    env:
+      envName: ${{parameters.envName}}
+      browser: $(browser)
+    workingDirectory: ${{parameters.workingDirectory}}
+
+  - bash: |
+      source .venv/bin/activate
+      echo "====================================="
+      echo "Environment: ${{parameters.envName}}"
+      echo "Pytest Tag: ${{parameters.pytest_tag}}"
+      echo "Parallel Workers: ${{parameters.parallelWorkers}}"
+      echo "====================================="
+      ls -la
+      echo "bin directory contents:"
+      ls -la .venv/bin
+      xvfb-run --auto-servernum --server-args="-screen 0 1280x960x24" python -m pytest -n ${{parameters.parallelWorkers}} -m "${{parameters.pytest_tag}}" --alluredir allure-results
+    displayName: "Execute UI Tests"
+    condition: succeededOrFailed()
+    continueOnError: true
+    env:
+      envName: ${{parameters.envName}}
+      browser: $(browser)
+    workingDirectory: ${{parameters.workingDirectory}}
+
+  - task: PublishPipelineArtifact@1
+    displayName: "Publish Allure Results Artifact"
+    condition: succeededOrFailed()
+    inputs:
+      targetPath: "${{parameters.workingDirectory}}/allure-results/"
+      artifact: "allure-results_${{parameters.envName}}_$(browser)"
+      publishLocation: "pipeline"
+
+  - task: PublishAllureReport@2
+    displayName: "Publish Allure Report"
+    condition: succeededOrFailed()
+    inputs:
+      allureVersion: "2.32.2"
+      testResultsDir: "./allure-results"
+      reportName: "UI Tests - ${{parameters.envName}} - $(browser)"
+
+  # Best practice for Azure Classic Release pipeline:
+  # Allure generates HTML reports, which cannot be directly published as test results in Azure DevOps.
+  # The recommended approach is to publish the Allure results and HTML report as pipeline artifacts.
+  # In your Classic Release pipeline, add an artifact download step to fetch these artifacts.
+  # You can then manually download and view the HTML report from the artifact, or host it on a web server if needed.
+  # The PublishAllureReport@1 task above generates the HTML report, and the PublishPipelineArtifact task below makes it available for download.
+  # - task: PublishPipelineArtifact@1
+  #   displayName: "Publish Allure HTML Report"
+  #   condition: succeededOrFailed()
+  #   inputs:
+  #     targetPath: "${{parameters.workingDirectory}}/allure-report"
+  #     artifact: "allure-html-report_${{parameters.envName}}"
+  #     publishLocation: "pipeline"
+

@@ -1,0 +1,10 @@
+{
+  "name": "Local Execution",
+  "type": "local",
+  "url": "http://localhost",
+  "buildOrder": 1794999769,
+  "buildName": "Local Test Run",
+  "buildUrl": "http://localhost",
+  "reportUrl": "",
+  "reportName": "Allure Report"
+}

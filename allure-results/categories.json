@@ -1,0 +1,73 @@
+[
+  {
+    "name": "Ignored tests",
+    "matchedStatuses": [
+      "skipped"
+    ]
+  },
+  {
+    "name": "Infrastructure problems",
+    "matchedStatuses": [
+      "broken",
+      "failed"
+    ],
+    "messageRegex": ".*([Tt]imeout|[Cc]onnection|[Nn]etwork|DNS|502|503|504|gateway|ERR_CONNECTION).*"
+  },
+  {
+    "name": "Outdated tests",
+    "matchedStatuses": [
+      "broken"
+    ],
+    "traceRegex": ".*(NoSuchElementException|ElementNotFound|ElementNotVisibleException|element.*not.*found).*"
+  },
+  {
+    "name": "Authentication failures",
+    "matchedStatuses": [
+      "failed",
+      "broken"
+    ],
+    "messageRegex": ".*(authentication|login|unauthorized|401|403|credential|session.*expired).*"
+  },
+  {
+    "name": "Assertion failures",
+    "matchedStatuses": [
+      "failed"
+    ],
+    "messageRegex": ".*(AssertionError|assert.*failed|[Ee]xpected.*but.*got).*"
+  },
+  {
+    "name": "Browser/Driver issues",
+    "matchedStatuses": [
+      "broken"
+    ],
+    "messageRegex": ".*(ChromeDriver|GeckoDriver|WebDriver|browser.*closed|Target.*closed|Session.*closed|Browser.*context.*was.*closed).*"
+  },
+  {
+    "name": "Timeout failures",
+    "matchedStatuses": [
+      "broken",
+      "failed"
+    ],
+    "messageRegex": ".*(TimeoutError|Timeout.*exceeded|Waiting.*for.*element.*timed.*out|Page.*navigation.*timed.*out).*"
+  },
+  {
+    "name": "Page load failures",
+    "matchedStatuses": [
+      "broken",
+      "failed"
+    ],
+    "messageRegex": ".*(page.*load|navigation.*failed|ERR_|net::).*"
+  },
+  {
+    "name": "Product defects",
+    "matchedStatuses": [
+      "failed"
+    ]
+  },
+  {
+    "name": "Test defects",
+    "matchedStatuses": [
+      "broken"
+    ]
+  }
+]

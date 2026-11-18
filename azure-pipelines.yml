@@ -1,0 +1,108 @@
+trigger:
+  - '*'
+
+# Azure Pipelines evaluates cron schedules in UTC.
+schedules:
+  - cron: "0 8 * * 1"
+    displayName: "Every Monday at 08:00 UTC"
+    branches:
+      include:
+        - '*'
+    always: true
+
+parameters:
+  - name: envName
+    displayName: Target environment
+    type: string
+    default: Test
+    values:
+      - Dev
+      - Test
+      - PreProd
+
+variables:
+  - group: ui-test-secrets
+  # Add SMTP_HOST, SMTP_PORT (587), SMTP_USERNAME, SMTP_PASSWORD (secret), MAIL_FROM,
+  # and NOTIFICATION_EMAILS to this variable group for failure email delivery.
+
+jobs:
+  - job: ui_tests
+    displayName: "UI tests (${{ parameters.envName }})"
+    pool:
+      vmImage: ubuntu-latest
+    strategy:
+      maxParallel: 3
+      matrix:
+        Chrome:
+          browser: chrome
+        Edge:
+          browser: edge
+        Firefox:
+          browser: firefox
+    steps:
+      - template: pipelines/templates/ui-test-steps.yml
+        parameters:
+          envName: ${{ parameters.envName }}
+          pytest_tag: smoke
+          parallelWorkers: 1
+          pythonVersion: "3.12"
+
+  - job: notify_failure
+    displayName: "Email failure notification"
+    dependsOn: ui_tests
+    condition: or(failed(), eq(dependencies.ui_tests.result, 'SucceededWithIssues'))
+    pool:
+      vmImage: ubuntu-latest
+    steps:
+      - bash: |
+          python3 - <<'PY'
+          import os
+          import smtplib
+          from email.message import EmailMessage
+
+          required = ("SMTP_HOST", "SMTP_PORT", "SMTP_USERNAME", "SMTP_PASSWORD", "MAIL_FROM", "MAIL_TO")
+          missing = [name for name in required if not os.environ.get(name) or os.environ[name].startswith("$(")]
+          if missing:
+              print(
+                "##vso[task.logissue type=warning]Failure email skipped; add "
+                + ", ".join(missing)
+                + " to the ui-test-secrets variable group."
+              )
+              raise SystemExit(0)
+
+          recipients = [address.strip() for address in os.environ["MAIL_TO"].replace(";", ",").split(",") if address.strip()]
+          build_url = os.environ["BUILD_URL"]
+          artifacts_url = os.environ["ARTIFACTS_URL"]
+          env_name = os.environ["TARGET_ENVIRONMENT"]
+          message = EmailMessage()
+          message["Subject"] = f"UI tests failed: {env_name} (build {os.environ['BUILD_NUMBER']})"
+          message["From"] = os.environ["MAIL_FROM"]
+          message["To"] = ", ".join(recipients)
+          message.set_content(
+              f"UI test execution failed.\n\n"
+              f"Environment: {env_name}\nBrowsers: Chrome, Edge, Firefox\nBuild: {os.environ['BUILD_NUMBER']}\n\n"
+              f"Allure report and run details: {build_url}\n"
+              f"Published test artifacts: {artifacts_url}\n"
+          )
+
+          host = os.environ["SMTP_HOST"]
+          port = int(os.environ["SMTP_PORT"])
+          with smtplib.SMTP(host, port, timeout=30) as server:
+              server.ehlo()
+              server.starttls()
+              server.ehlo()
+              server.login(os.environ["SMTP_USERNAME"], os.environ["SMTP_PASSWORD"])
+              server.send_message(message, to_addrs=recipients)
+          PY
+        displayName: "Send failure email with report links"
+        env:
+          SMTP_HOST: $(SMTP_HOST)
+          SMTP_PORT: $(SMTP_PORT)
+          SMTP_USERNAME: $(SMTP_USERNAME)
+          SMTP_PASSWORD: $(SMTP_PASSWORD)
+          MAIL_FROM: $(MAIL_FROM)
+          MAIL_TO: $(NOTIFICATION_EMAILS)
+          BUILD_URL: $(System.TeamFoundationCollectionUri)$(System.TeamProject)/_build/results?buildId=$(Build.BuildId)
+          ARTIFACTS_URL: $(System.TeamFoundationCollectionUri)$(System.TeamProject)/_build/results?buildId=$(Build.BuildId)&view=artifacts&type=publishedArtifacts
+          BUILD_NUMBER: $(Build.BuildNumber)
+          TARGET_ENVIRONMENT: ${{ parameters.envName }}
